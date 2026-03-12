@@ -1,0 +1,846 @@
+import { useState, useEffect } from "react";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+
+// ─── Mock Data ────────────────────────────────────────────────────
+const trendData = [
+  { day: "Mar 1", sent: 1200, delivered: 1100, read: 820, replies: 94 },
+  { day: "Mar 3", sent: 1800, delivered: 1650, read: 1200, replies: 145 },
+  { day: "Mar 5", sent: 980, delivered: 920, read: 710, replies: 82 },
+  { day: "Mar 7", sent: 2400, delivered: 2200, read: 1750, replies: 210 },
+  { day: "Mar 9", sent: 1650, delivered: 1520, read: 1100, replies: 130 },
+  { day: "Mar 11", sent: 3100, delivered: 2900, read: 2200, replies: 280 },
+  { day: "Mar 12", sent: 2200, delivered: 2050, read: 1600, replies: 195 },
+];
+
+const leadData = [
+  { name: "Hot 🔥", value: 124, color: "#ef4444" },
+  { name: "Warm 🌡️", value: 348, color: "#f97316" },
+  { name: "Cold 🧊", value: 512, color: "#6366f1" },
+];
+
+const campaigns = [
+  { id: 1, name: "Diwali Sale 2025", status: "completed", sent: 4200, delivered: 3950, read: 3100, replies: 380, date: "Oct 28" },
+  { id: 2, name: "Real Estate Lead Gen", status: "running", sent: 1850, delivered: 1720, read: 1380, replies: 195, date: "Mar 10" },
+  { id: 3, name: "Coaching Batch Promo", status: "scheduled", sent: 0, delivered: 0, read: 0, replies: 0, date: "Mar 15" },
+  { id: 4, name: "Product Launch - Hyderabad", status: "draft", sent: 0, delivered: 0, read: 0, replies: 0, date: "Mar 18" },
+];
+
+const contacts = [
+  { id: 1, name: "Ravi Kumar", phone: "+91 98765 43210", city: "Hyderabad", tags: ["Real Estate", "Hot"], optIn: true, added: "Mar 8" },
+  { id: 2, name: "Priya Sharma", phone: "+91 87654 32109", city: "Vijayawada", tags: ["Education", "Warm"], optIn: true, added: "Mar 7" },
+  { id: 3, name: "Venkat Rao", phone: "+91 76543 21098", city: "Warangal", tags: ["Ecommerce"], optIn: true, added: "Mar 5" },
+  { id: 4, name: "Anita Reddy", phone: "+91 65432 10987", city: "Guntur", tags: ["Real Estate", "Cold"], optIn: false, added: "Mar 4" },
+  { id: 5, name: "Srinivas B", phone: "+91 54321 09876", city: "Hyderabad", tags: ["Coaching", "Hot"], optIn: true, added: "Mar 1" },
+];
+
+const conversations = [
+  { id: 1, name: "Ravi Kumar", phone: "+91 98765 43210", lastMsg: "Yes, I am interested in the 3BHK project", time: "2 min ago", unread: 2, status: "bot" },
+  { id: 2, name: "Meena Laxmi", phone: "+91 94567 23456", lastMsg: "What is the EMI for ₹50 lakhs?", time: "15 min ago", unread: 1, status: "open" },
+  { id: 3, name: "Arjun Naidu", phone: "+91 90987 65432", lastMsg: "Please send the brochure", time: "1 hr ago", unread: 0, status: "assigned" },
+  { id: 4, name: "Sudha Varma", phone: "+91 88765 54321", lastMsg: "Thank you! Will call back", time: "3 hr ago", unread: 0, status: "closed" },
+];
+
+// ─── Components ───────────────────────────────────────────────────
+
+const StatusBadge = ({ status }) => {
+  const styles = {
+    completed: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
+    running: "bg-blue-500/15 text-blue-400 border border-blue-500/30",
+    scheduled: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+    draft: "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30",
+    open: "bg-blue-500/15 text-blue-400 border border-blue-500/30",
+    bot: "bg-violet-500/15 text-violet-400 border border-violet-500/30",
+    assigned: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+    closed: "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30",
+  };
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${styles[status] || styles.draft}`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+};
+
+const MetricCard = ({ label, value, sub, trend, color = "indigo" }) => {
+  const colors = {
+    indigo: "from-indigo-600/20 to-indigo-900/5 border-indigo-500/20",
+    emerald: "from-emerald-600/20 to-emerald-900/5 border-emerald-500/20",
+    amber: "from-amber-600/20 to-amber-900/5 border-amber-500/20",
+    blue: "from-blue-600/20 to-blue-900/5 border-blue-500/20",
+  };
+  const dotColors = { indigo: "bg-indigo-400", emerald: "bg-emerald-400", amber: "bg-amber-400", blue: "bg-blue-400" };
+  return (
+    <div className={`bg-gradient-to-br ${colors[color]} border rounded-2xl p-5 relative overflow-hidden`}>
+      <div className={`absolute top-3 right-3 w-2 h-2 rounded-full ${dotColors[color]} animate-pulse`} />
+      <p className="text-xs text-zinc-500 font-medium uppercase tracking-widest mb-2">{label}</p>
+      <p className="text-3xl font-bold text-white tracking-tight">{value}</p>
+      {sub && <p className="text-sm text-zinc-400 mt-1">{sub}</p>}
+      {trend && <p className={`text-xs mt-2 font-medium ${trend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+        {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}% vs last week
+      </p>}
+    </div>
+  );
+};
+
+// ─── Pages ────────────────────────────────────────────────────────
+
+function DashboardPage() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+        <p className="text-zinc-500 text-sm mt-1">Last 30 days overview • Hyderabad HQ</p>
+      </div>
+
+      {/* Metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard label="Messages Sent" value="12,840" sub="This month" trend={18} color="indigo" />
+        <MetricCard label="Delivery Rate" value="93.2%" sub="Industry avg: 85%" trend={4} color="emerald" />
+        <MetricCard label="Read Rate" value="71.4%" sub="6,842 opened" trend={9} color="blue" />
+        <MetricCard label="Hot Leads" value="124" sub="Need follow-up" trend={-3} color="amber" />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-zinc-300 mb-4">Message Performance (7 days)</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={trendData}>
+              <defs>
+                <linearGradient id="sentGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="readGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+              <XAxis dataKey="day" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px', color: '#fff' }} />
+              <Area type="monotone" dataKey="sent" stroke="#6366f1" fill="url(#sentGrad)" strokeWidth={2} />
+              <Area type="monotone" dataKey="read" stroke="#10b981" fill="url(#readGrad)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <h3 className="text-sm font-semibold text-zinc-300 mb-4">Lead Distribution</h3>
+          <ResponsiveContainer width="100%" height={160}>
+            <PieChart>
+              <Pie data={leadData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={3} dataKey="value">
+                {leadData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+              </Pie>
+              <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px', color: '#fff' }} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="space-y-2 mt-3">
+            {leadData.map(l => (
+              <div key={l.name} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ background: l.color }} />
+                  <span className="text-xs text-zinc-400">{l.name}</span>
+                </div>
+                <span className="text-xs font-semibold text-white">{l.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Campaigns */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+          <h3 className="text-sm font-semibold text-zinc-300">Recent Campaigns</h3>
+          <button className="text-xs text-indigo-400 hover:text-indigo-300">View all →</button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="text-xs text-zinc-500 border-b border-zinc-800">
+                <th className="text-left px-5 py-3">Campaign</th>
+                <th className="text-left px-5 py-3">Status</th>
+                <th className="text-right px-5 py-3">Sent</th>
+                <th className="text-right px-5 py-3">Delivered</th>
+                <th className="text-right px-5 py-3">Read</th>
+                <th className="text-right px-5 py-3">Replies</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map(c => (
+                <tr key={c.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                  <td className="px-5 py-3">
+                    <p className="text-sm text-white font-medium">{c.name}</p>
+                    <p className="text-xs text-zinc-500">{c.date}</p>
+                  </td>
+                  <td className="px-5 py-3"><StatusBadge status={c.status} /></td>
+                  <td className="px-5 py-3 text-right text-sm text-zinc-300">{c.sent.toLocaleString()}</td>
+                  <td className="px-5 py-3 text-right text-sm text-zinc-300">{c.delivered.toLocaleString()}</td>
+                  <td className="px-5 py-3 text-right text-sm text-zinc-300">{c.read.toLocaleString()}</td>
+                  <td className="px-5 py-3 text-right text-sm text-emerald-400 font-medium">{c.replies}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContactsPage() {
+  const [search, setSearch] = useState("");
+  const filtered = contacts.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.city.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Contacts</h1>
+          <p className="text-zinc-500 text-sm">984 total • 921 opted-in</p>
+        </div>
+        <div className="flex gap-2">
+          <button className="flex items-center gap-2 px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl border border-zinc-700 transition-colors">
+            ↑ Import CSV
+          </button>
+          <button className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition-colors">
+            + Add Contact
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl">
+        <div className="p-4 border-b border-zinc-800">
+          <input
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+            placeholder="Search contacts by name, phone, city..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="text-xs text-zinc-500 border-b border-zinc-800">
+              <th className="text-left px-5 py-3">Name</th>
+              <th className="text-left px-5 py-3">Phone</th>
+              <th className="text-left px-5 py-3">City</th>
+              <th className="text-left px-5 py-3">Tags</th>
+              <th className="text-left px-5 py-3">Opt-in</th>
+              <th className="text-left px-5 py-3">Added</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(c => (
+              <tr key={c.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 cursor-pointer transition-colors">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">
+                      {c.name[0]}
+                    </div>
+                    <span className="text-sm text-white">{c.name}</span>
+                  </div>
+                </td>
+                <td className="px-5 py-3 text-sm text-zinc-400 font-mono">{c.phone}</td>
+                <td className="px-5 py-3 text-sm text-zinc-400">{c.city}</td>
+                <td className="px-5 py-3">
+                  <div className="flex gap-1 flex-wrap">
+                    {c.tags.map(t => (
+                      <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-zinc-700 text-zinc-300">{t}</span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-5 py-3">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${c.optIn ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+                    {c.optIn ? 'Yes' : 'No'}
+                  </span>
+                </td>
+                <td className="px-5 py-3 text-sm text-zinc-500">{c.added}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CampaignPage() {
+  const [step, setStep] = useState(1);
+  const [aiMode, setAiMode] = useState(false);
+  const [goal, setGoal] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generated, setGenerated] = useState(null);
+
+  const handleGenerate = () => {
+    setGenerating(true);
+    setTimeout(() => {
+      setGenerated({
+        campaignName: "Hyderabad Real Estate Spring Offer",
+        message: "Hello {{name}}! 🏠 Spring Special — Premium flats in Kondapur from ₹45L only. Limited units left!\n\nBook a FREE site visit this weekend and get:\n✅ Flexible EMI options\n✅ Zero registration charges\n✅ 1-year maintenance free\n\nReply YES to know more!",
+        followUp: "Hi {{name}}, did you get a chance to check our spring offer? Our sales team is available today 10am-6pm. Just reply or call us!",
+        bestTime: "10:00 AM IST",
+        estimatedRate: "12-18%",
+      });
+      setGenerating(false);
+    }, 2000);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Campaign Builder</h1>
+          <p className="text-zinc-500 text-sm">Create and launch WhatsApp campaigns</p>
+        </div>
+        <div className="flex items-center gap-2 bg-zinc-800 rounded-xl p-1">
+          <button onClick={() => setAiMode(false)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${!aiMode ? 'bg-zinc-700 text-white' : 'text-zinc-500'}`}>Manual</button>
+          <button onClick={() => setAiMode(true)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${aiMode ? 'bg-indigo-600 text-white' : 'text-zinc-500'}`}>✨ AI Generate</button>
+        </div>
+      </div>
+
+      {aiMode ? (
+        <div className="space-y-4">
+          <div className="bg-gradient-to-br from-indigo-950/50 to-violet-950/30 border border-indigo-500/20 rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">✨</span>
+              <h2 className="text-base font-semibold text-white">AI Campaign Generator</h2>
+            </div>
+            <div className="space-y-3">
+              <textarea
+                className="w-full bg-zinc-900/80 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 resize-none"
+                rows={3}
+                placeholder="Describe your campaign goal... e.g., 'Promote our real estate project in Hyderabad to working professionals aged 28-45 interested in buying their first home'"
+                value={goal}
+                onChange={e => setGoal(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <select className="bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                  <option>Real Estate</option>
+                  <option>Education / Coaching</option>
+                  <option>E-commerce</option>
+                  <option>Finance</option>
+                </select>
+                <select className="bg-zinc-900 border border-zinc-700 text-zinc-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                  <option>Professional</option>
+                  <option>Friendly</option>
+                  <option>Urgent</option>
+                  <option>Festive</option>
+                </select>
+                <button
+                  onClick={handleGenerate}
+                  disabled={!goal || generating}
+                  className="ml-auto px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors"
+                >
+                  {generating ? "Generating..." : "Generate →"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {generating && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm text-zinc-400">AI is crafting your campaign...</p>
+              </div>
+            </div>
+          )}
+
+          {generated && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">Generated Campaign</h3>
+                <span className="text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">AI Generated ✓</span>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Campaign Name</label>
+                <p className="text-sm text-white bg-zinc-800 rounded-xl px-4 py-2">{generated.campaignName}</p>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Main Message</label>
+                <pre className="text-sm text-zinc-300 bg-zinc-800 rounded-xl px-4 py-3 whitespace-pre-wrap font-sans">{generated.message}</pre>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Follow-up (24hrs)</label>
+                <p className="text-sm text-zinc-300 bg-zinc-800 rounded-xl px-4 py-3">{generated.followUp}</p>
+              </div>
+              <div className="flex gap-4">
+                <div className="text-center bg-zinc-800 rounded-xl px-4 py-3 flex-1">
+                  <p className="text-xs text-zinc-500">Best Send Time</p>
+                  <p className="text-sm font-semibold text-amber-400">{generated.bestTime}</p>
+                </div>
+                <div className="text-center bg-zinc-800 rounded-xl px-4 py-3 flex-1">
+                  <p className="text-xs text-zinc-500">Est. Conversion</p>
+                  <p className="text-sm font-semibold text-emerald-400">{generated.estimatedRate}</p>
+                </div>
+              </div>
+              <button className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors">
+                Use this Campaign →
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+          <div className="flex gap-2 mb-4">
+            {[1, 2, 3].map(s => (
+              <div key={s} className="flex items-center gap-2">
+                <div onClick={() => setStep(s)} className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer transition-all ${step >= s ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>{s}</div>
+                <span className={`text-xs ${step >= s ? 'text-zinc-300' : 'text-zinc-600'}`}>{['Setup', 'Audience', 'Review'][s - 1]}</span>
+                {s < 3 && <div className={`w-8 h-px ${step > s ? 'bg-indigo-600' : 'bg-zinc-700'}`} />}
+              </div>
+            ))}
+          </div>
+
+          {step === 1 && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Campaign Name</label>
+                <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500" placeholder="e.g., Diwali Sale 2025" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">WhatsApp Template</label>
+                <select className="w-full bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500">
+                  <option>Select approved template...</option>
+                  <option>Diwali Sale Template ✓</option>
+                  <option>Property Inquiry Template ✓</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Schedule</label>
+                <input type="datetime-local" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-300 focus:outline-none focus:border-indigo-500" />
+              </div>
+              <button onClick={() => setStep(2)} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors">
+                Next: Set Audience →
+              </button>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Filter by Tags</label>
+                <div className="flex gap-2 flex-wrap">
+                  {["Real Estate", "Education", "Ecommerce", "Hot Leads", "Hyderabad"].map(t => (
+                    <button key={t} className="text-xs px-3 py-1.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-400 hover:border-indigo-500 hover:text-indigo-300 transition-colors">
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-500 mb-1 block">Filter by City</label>
+                <input className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500" placeholder="e.g., Hyderabad" />
+              </div>
+              <div className="bg-zinc-800 rounded-xl p-3">
+                <p className="text-xs text-zinc-500">Estimated audience</p>
+                <p className="text-lg font-bold text-white">842 <span className="text-sm font-normal text-zinc-500">contacts</span></p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setStep(1)} className="flex-1 py-2.5 bg-zinc-800 text-zinc-300 rounded-xl text-sm font-medium">← Back</button>
+                <button onClick={() => setStep(3)} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors">Next: Review →</button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-3">
+              <div className="bg-zinc-800 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between text-sm"><span className="text-zinc-500">Campaign</span><span className="text-white font-medium">Diwali Sale 2025</span></div>
+                <div className="flex justify-between text-sm"><span className="text-zinc-500">Template</span><span className="text-white">Diwali Sale Template</span></div>
+                <div className="flex justify-between text-sm"><span className="text-zinc-500">Recipients</span><span className="text-emerald-400 font-semibold">842 contacts</span></div>
+                <div className="flex justify-between text-sm"><span className="text-zinc-500">Scheduled</span><span className="text-white">Mar 15 at 10:00 AM</span></div>
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                <p className="text-xs text-amber-400">⚠️ This will use 842 of your 4,158 remaining messages</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setStep(2)} className="flex-1 py-2.5 bg-zinc-800 text-zinc-300 rounded-xl text-sm font-medium">← Back</button>
+                <button className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium transition-colors">🚀 Launch Campaign</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InboxPage() {
+  const [activeConv, setActiveConv] = useState(conversations[0]);
+  const [messages] = useState([
+    { id: 1, dir: "in", text: "Hello, I saw your property ad on Instagram", time: "10:30 AM" },
+    { id: 2, dir: "out", text: "Thank you for reaching out! We have some excellent properties available in Hyderabad. May I know your budget range?", time: "10:31 AM", ai: true },
+    { id: 3, dir: "in", text: "Looking for 2-3 BHK, budget around 50-70 lakhs", time: "10:33 AM" },
+    { id: 4, dir: "out", text: "Perfect! We have 3 projects that match your requirements. Would you like to schedule a free site visit this weekend?", time: "10:34 AM", ai: true },
+    { id: 5, dir: "in", text: "Yes, I am interested in the 3BHK project", time: "10:35 AM" },
+  ]);
+
+  return (
+    <div className="flex h-[calc(100vh-8rem)] gap-4">
+      {/* Conversation List */}
+      <div className="w-72 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col">
+        <div className="p-4 border-b border-zinc-800">
+          <input className="w-full bg-zinc-800 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none" placeholder="Search conversations..." />
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {conversations.map(c => (
+            <div
+              key={c.id}
+              onClick={() => setActiveConv(c)}
+              className={`p-4 border-b border-zinc-800/50 cursor-pointer hover:bg-zinc-800/50 transition-colors ${activeConv.id === c.id ? 'bg-zinc-800' : ''}`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">
+                    {c.name[0]}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-white">{c.name}</p>
+                    <StatusBadge status={c.status} />
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-zinc-500">{c.time}</p>
+                  {c.unread > 0 && <span className="inline-block w-4 h-4 bg-indigo-600 text-white text-xs rounded-full text-center leading-4 mt-1">{c.unread}</span>}
+                </div>
+              </div>
+              <p className="text-xs text-zinc-500 mt-1.5 truncate">{c.lastMsg}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Chat Window */}
+      <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-sm font-bold text-indigo-300">
+              {activeConv.name[0]}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">{activeConv.name}</p>
+              <p className="text-xs text-zinc-500">{activeConv.phone}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-xs bg-violet-500/15 text-violet-400 border border-violet-500/30 px-3 py-1 rounded-full">🤖 Bot Active</span>
+            <button className="text-xs bg-zinc-800 text-zinc-300 px-3 py-1 rounded-full border border-zinc-700 hover:border-amber-500/50 hover:text-amber-400 transition-colors">Take Over</button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {messages.map(m => (
+            <div key={m.id} className={`flex ${m.dir === 'out' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-xs lg:max-w-sm rounded-2xl px-4 py-2.5 ${m.dir === 'out' ? 'bg-indigo-600 text-white rounded-br-sm' : 'bg-zinc-800 text-zinc-200 rounded-bl-sm'}`}>
+                <p className="text-sm">{m.text}</p>
+                <div className="flex items-center justify-end gap-1 mt-1">
+                  {m.ai && <span className="text-xs opacity-60">✨ AI</span>}
+                  <span className="text-xs opacity-60">{m.time}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-4 border-t border-zinc-800 flex gap-2">
+          <input className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500" placeholder="Type a message..." />
+          <button className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm transition-colors">Send</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LeadsPage() {
+  const leads = [
+    { name: "Ravi Kumar", phone: "+91 98765 43210", score: 85, label: "hot", source: "Campaign", status: "Qualified", lastActivity: "2 min ago" },
+    { name: "Meena Sharma", phone: "+91 87654 32109", score: 62, label: "warm", source: "Chatbot", status: "Contacted", lastActivity: "1 hr ago" },
+    { name: "Venkat Reddy", phone: "+91 76543 21098", score: 45, label: "warm", source: "Landing Page", status: "New", lastActivity: "3 hr ago" },
+    { name: "Anita B", phone: "+91 65432 10987", score: 22, label: "cold", source: "CSV Import", status: "New", lastActivity: "1 day ago" },
+    { name: "Srinivas N", phone: "+91 54321 09876", score: 91, label: "hot", source: "Campaign", status: "Converted", lastActivity: "Just now" },
+  ];
+
+  const labelColor = { hot: "text-red-400 bg-red-500/10 border-red-500/20", warm: "text-amber-400 bg-amber-500/10 border-amber-500/20", cold: "text-blue-400 bg-blue-500/10 border-blue-500/20" };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Lead Management</h1>
+          <p className="text-zinc-500 text-sm">AI-scored leads from all sources</p>
+        </div>
+        <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition-colors">
+          ✨ Score All Leads
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Hot Leads 🔥", count: 124, color: "from-red-950/50 border-red-500/20 text-red-400" },
+          { label: "Warm Leads 🌡️", count: 348, color: "from-amber-950/50 border-amber-500/20 text-amber-400" },
+          { label: "Cold Leads 🧊", count: 512, color: "from-blue-950/50 border-blue-500/20 text-blue-400" },
+        ].map(b => (
+          <div key={b.label} className={`bg-gradient-to-br ${b.color} border rounded-2xl p-4`}>
+            <p className="text-xs text-zinc-500 mb-1">{b.label}</p>
+            <p className={`text-3xl font-bold ${b.color.split(' ').pop()}`}>{b.count}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="text-xs text-zinc-500 border-b border-zinc-800">
+              <th className="text-left px-5 py-3">Lead</th>
+              <th className="text-left px-5 py-3">Score</th>
+              <th className="text-left px-5 py-3">Label</th>
+              <th className="text-left px-5 py-3">Source</th>
+              <th className="text-left px-5 py-3">Status</th>
+              <th className="text-left px-5 py-3">Last Activity</th>
+              <th className="text-left px-5 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {leads.map((l, i) => (
+              <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-indigo-600/30 flex items-center justify-center text-xs font-bold text-indigo-300">{l.name[0]}</div>
+                    <div>
+                      <p className="text-sm text-white">{l.name}</p>
+                      <p className="text-xs text-zinc-500 font-mono">{l.phone}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 bg-zinc-800 rounded-full h-1.5">
+                      <div className="bg-indigo-500 rounded-full h-1.5" style={{ width: `${l.score}%` }} />
+                    </div>
+                    <span className="text-xs font-mono text-zinc-300">{l.score}</span>
+                  </div>
+                </td>
+                <td className="px-5 py-3">
+                  <span className={`text-xs px-2 py-0.5 rounded-full border ${labelColor[l.label]}`}>
+                    {l.label.charAt(0).toUpperCase() + l.label.slice(1)}
+                  </span>
+                </td>
+                <td className="px-5 py-3 text-sm text-zinc-400">{l.source}</td>
+                <td className="px-5 py-3 text-sm text-zinc-400">{l.status}</td>
+                <td className="px-5 py-3 text-xs text-zinc-500">{l.lastActivity}</td>
+                <td className="px-5 py-3">
+                  <button className="text-xs text-indigo-400 hover:text-indigo-300">Message</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsPage() {
+  const barData = [
+    { name: "Mon", sent: 1200, delivered: 1100, read: 820 },
+    { name: "Tue", sent: 1800, delivered: 1700, read: 1300 },
+    { name: "Wed", sent: 900, delivered: 850, read: 640 },
+    { name: "Thu", sent: 2400, delivered: 2250, read: 1780 },
+    { name: "Fri", sent: 1650, delivered: 1550, read: 1200 },
+    { name: "Sat", sent: 3100, delivered: 2950, read: 2400 },
+    { name: "Sun", sent: 750, delivered: 700, read: 530 },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <h1 className="text-2xl font-bold text-white">Analytics</h1>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: "Total Sent", value: "12,800", change: "+18%" },
+          { label: "Delivered", value: "11,920", change: "+15%" },
+          { label: "Read", value: "8,540", change: "+22%" },
+          { label: "Conversions", value: "284", change: "+31%" },
+        ].map(m => (
+          <div key={m.label} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <p className="text-xs text-zinc-500 mb-1">{m.label}</p>
+            <p className="text-2xl font-bold text-white">{m.value}</p>
+            <p className="text-xs text-emerald-400 mt-1">{m.change} vs last month</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <h3 className="text-sm font-semibold text-zinc-300 mb-4">Weekly Message Volume</h3>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={barData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+            <XAxis dataKey="name" tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#71717a', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px', color: '#fff' }} />
+            <Bar dataKey="sent" fill="#6366f1" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="delivered" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="read" fill="#10b981" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+        <div className="flex gap-4 mt-3">
+          {[{ color: "#6366f1", label: "Sent" }, { color: "#3b82f6", label: "Delivered" }, { color: "#10b981", label: "Read" }].map(l => (
+            <div key={l.label} className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-sm" style={{ background: l.color }} />
+              <span className="text-xs text-zinc-500">{l.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BillingPage() {
+  const [current] = useState("growth");
+  const plans = [
+    { id: "starter", name: "Starter", price: "₹999", period: "/month", messages: "5,000", features: ["5K messages/month", "1 WA number", "Basic analytics", "CSV import", "Email support"] },
+    { id: "growth", name: "Growth", price: "₹3,999", period: "/month", messages: "25,000", features: ["25K messages/month", "3 WA numbers", "AI campaign generator", "Lead scoring", "Chatbot builder", "Priority support"], popular: true },
+    { id: "agency", name: "Agency", price: "₹9,999", period: "/month", messages: "1,00,000", features: ["1L messages/month", "Unlimited numbers", "White-label", "Full API access", "Custom integrations", "Dedicated manager"] },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Subscription & Billing</h1>
+        <p className="text-zinc-500 text-sm">Current plan: <span className="text-indigo-400 font-semibold">Growth</span> • Renews Apr 12, 2026</p>
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-zinc-300">Message Usage</h3>
+          <span className="text-xs text-zinc-500">This month</span>
+        </div>
+        <div className="flex items-end gap-3 mb-2">
+          <span className="text-3xl font-bold text-white">8,420</span>
+          <span className="text-sm text-zinc-500 mb-1">/ 25,000 messages</span>
+        </div>
+        <div className="w-full bg-zinc-800 rounded-full h-2">
+          <div className="bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full h-2" style={{ width: "33.7%" }} />
+        </div>
+        <p className="text-xs text-zinc-500 mt-2">16,580 messages remaining • 33.7% used</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {plans.map(p => (
+          <div key={p.id} className={`relative bg-zinc-900 border rounded-2xl p-5 ${current === p.id ? 'border-indigo-500/50' : 'border-zinc-800'} ${p.popular ? 'ring-1 ring-indigo-500/30' : ''}`}>
+            {p.popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-xs px-3 py-0.5 rounded-full">Most Popular</div>}
+            {current === p.id && <div className="absolute top-3 right-3 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs px-2 py-0.5 rounded-full">Current</div>}
+            <h3 className="text-base font-bold text-white mb-1">{p.name}</h3>
+            <p className="text-3xl font-bold text-white mb-1">{p.price}<span className="text-sm text-zinc-500 font-normal">{p.period}</span></p>
+            <p className="text-xs text-zinc-500 mb-4">{p.messages} messages/month</p>
+            <ul className="space-y-2 mb-5">
+              {p.features.map(f => (
+                <li key={f} className="flex items-center gap-2 text-xs text-zinc-400">
+                  <span className="text-emerald-400">✓</span> {f}
+                </li>
+              ))}
+            </ul>
+            <button className={`w-full py-2 rounded-xl text-sm font-medium transition-colors ${current === p.id ? 'bg-zinc-800 text-zinc-500 cursor-default' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>
+              {current === p.id ? 'Current Plan' : 'Upgrade'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Navigation ───────────────────────────────────────────────────
+const navItems = [
+  { id: "dashboard", icon: "⊞", label: "Dashboard" },
+  { id: "campaigns", icon: "📣", label: "Campaigns" },
+  { id: "contacts", icon: "👥", label: "Contacts" },
+  { id: "inbox", icon: "💬", label: "Inbox" },
+  { id: "leads", icon: "🎯", label: "Leads" },
+  { id: "analytics", icon: "📊", label: "Analytics" },
+  { id: "billing", icon: "💳", label: "Billing" },
+];
+
+// ─── Main App ─────────────────────────────────────────────────────
+export default function App() {
+  const [page, setPage] = useState("dashboard");
+  const [collapsed, setCollapsed] = useState(false);
+
+  const pages = { dashboard: DashboardPage, campaigns: CampaignPage, contacts: ContactsPage, inbox: InboxPage, leads: LeadsPage, analytics: AnalyticsPage, billing: BillingPage };
+  const PageComponent = pages[page] || DashboardPage;
+
+  return (
+    <div className="flex h-screen bg-zinc-950 text-white overflow-hidden" style={{ fontFamily: "'DM Sans', 'Inter', sans-serif" }}>
+      {/* Sidebar */}
+      <aside className={`${collapsed ? 'w-16' : 'w-56'} flex-shrink-0 bg-zinc-900 border-r border-zinc-800 flex flex-col transition-all duration-200`}>
+        {/* Logo */}
+        <div className="h-16 flex items-center px-4 border-b border-zinc-800">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-sm font-bold flex-shrink-0">W</div>
+            {!collapsed && <div className="min-w-0">
+              <p className="text-sm font-bold text-white truncate">WA Growth</p>
+              <p className="text-xs text-zinc-500 truncate">Engine</p>
+            </div>}
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-1">
+          {navItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setPage(item.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${page === item.id ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}`}
+            >
+              <span className="text-base flex-shrink-0">{item.icon}</span>
+              {!collapsed && <span className="font-medium truncate">{item.label}</span>}
+            </button>
+          ))}
+        </nav>
+
+        {/* User */}
+        <div className="p-3 border-t border-zinc-800">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div className="w-7 h-7 rounded-full bg-indigo-600/40 border border-indigo-500/40 flex items-center justify-center text-xs font-bold text-indigo-300 flex-shrink-0">R</div>
+            {!collapsed && <div className="min-w-0">
+              <p className="text-xs font-semibold text-white truncate">Ravi Sharma</p>
+              <p className="text-xs text-zinc-500 truncate">Growth Plan</p>
+            </div>}
+          </div>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <header className="h-16 flex items-center justify-between px-6 border-b border-zinc-800 bg-zinc-900/50">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setCollapsed(!collapsed)} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+              ☰
+            </button>
+            <div className="hidden md:block">
+              <p className="text-xs text-zinc-500">WA Growth Engine • <span className="text-indigo-400">Growth Plan</span></p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-xl">
+              ● WhatsApp Connected
+            </div>
+            <div className="w-8 h-8 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">R</div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 overflow-y-auto p-6">
+          <PageComponent />
+        </main>
+      </div>
+    </div>
+  );
+}
