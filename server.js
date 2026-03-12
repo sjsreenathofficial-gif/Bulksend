@@ -20,14 +20,14 @@ global.db = db;
 global.firebaseAuth = auth;
 
 // Route imports
-const authRoutes = require('./routes/auth.routes');
-const contactRoutes = require('./routes/contact.routes');
-const campaignRoutes = require('./routes/campaign.routes');
-const webhookRoutes = require('./routes/webhook.routes');
-const aiRoutes = require('./routes/ai.routes');
-const analyticsRoutes = require('./routes/analytics.routes');
-const leadRoutes = require('./routes/lead.routes');
-const chatRoutes = require('./routes/chat.routes');
+const authRoutes      = require('./auth.routes');
+const contactRoutes   = require('./contact.routes');
+const campaignRoutes  = require('./campaign.routes');
+const webhookRoutes   = require('./webhook.routes');
+const aiRoutes        = require('./ai.routes');
+const analyticsRoutes = require('./analytics.routes');
+const leadRoutes      = require('./lead.routes');
+const chatRoutes      = require('./chat.routes');
 const billingRoutes = require('./routes/billing.routes');
 
 const app = express();
