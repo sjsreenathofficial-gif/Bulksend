@@ -63,6 +63,6 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Bulksend API running on port ${PORT} | Firebase connected`));
+module.exports = app;
 
 module.exports = { app, db };
