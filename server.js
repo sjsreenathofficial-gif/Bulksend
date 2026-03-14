@@ -64,5 +64,3 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 module.exports = app;
-
-module.exports = { app, db };
