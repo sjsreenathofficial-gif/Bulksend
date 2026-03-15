@@ -214,84 +214,85 @@ window.loadPage = async (page) => {
 // ══════════════════════════════════════════════════════════════════
 // DASHBOARD PAGE
 // ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// DASHBOARD PAGE
+// ══════════════════════════════════════════════════════════════════
 async function loadDashboard() {
-  const data = await apiCall('/analytics/dashboard');
-  const o    = data.overview;
-  const u    = data.usage;
+  const orgId = currentOrg?.id;
+  const [contactsSnap, campaignsSnap, leadsSnap] = await Promise.all([
+    getDocs(query(collection(db, 'contacts'),  where('orgId','==',orgId))),
+    getDocs(query(collection(db, 'campaigns'), where('orgId','==',orgId), orderBy('createdAt','desc'), limit(5))),
+    getDocs(query(collection(db, 'leads'),     where('orgId','==',orgId))),
+  ]);
+
+  const campaigns  = campaignsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const leads      = leadsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const hotLeads   = leads.filter(l => l.scoreLabel === 'Hot').length;
+  const warmLeads  = leads.filter(l => l.scoreLabel === 'Warm').length;
+  const coldLeads  = leads.filter(l => l.scoreLabel === 'Cold').length;
+  const msgUsed    = currentOrg?.messagesUsed  || 0;
+  const msgLimit   = currentOrg?.messageLimit  || 1000;
+  const usagePct   = Math.min((msgUsed / msgLimit) * 100, 100).toFixed(0);
+  const plan       = currentOrg?.plan || 'free';
 
   document.getElementById('pageContent').innerHTML = `
     <div class="space-y-5">
-      <!-- Header -->
       <div>
         <h1 class="text-xl font-bold text-white">Dashboard</h1>
-        <p class="text-zinc-500 text-sm mt-0.5">Welcome back, ${currentUser.displayName || 'there'} 👋</p>
+        <p class="text-zinc-500 text-sm mt-0.5">Welcome back, ${currentUser.email?.split('@')[0]} 👋</p>
       </div>
-
-      <!-- Usage Bar -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
         <div class="flex justify-between items-center mb-2">
           <span class="text-xs text-zinc-500 uppercase tracking-wider">Message Usage</span>
-          <span class="text-xs font-semibold text-indigo-400">${u.plan?.toUpperCase()} PLAN</span>
+          <span class="text-xs font-semibold text-indigo-400">${plan.toUpperCase()} PLAN</span>
         </div>
         <div class="flex items-end gap-2 mb-2">
-          <span class="text-2xl font-bold text-white">${(u.messagesUsed||0).toLocaleString()}</span>
-          <span class="text-sm text-zinc-500 mb-0.5">/ ${(u.messageLimit||0).toLocaleString()} messages</span>
+          <span class="text-2xl font-bold text-white">${msgUsed.toLocaleString()}</span>
+          <span class="text-sm text-zinc-500 mb-0.5">/ ${msgLimit.toLocaleString()} messages</span>
         </div>
         <div class="w-full bg-zinc-800 rounded-full h-2 mb-1">
-          <div class="bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full h-2 transition-all"
-               style="width: ${u.usagePercent || '0%'}"></div>
+          <div class="bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full h-2" style="width:${usagePct}%"></div>
         </div>
-        <p class="text-xs text-zinc-600">${(u.remaining||0).toLocaleString()} messages remaining</p>
+        <p class="text-xs text-zinc-600">${(msgLimit - msgUsed).toLocaleString()} messages remaining</p>
       </div>
-
-      <!-- Stats Grid -->
       <div class="grid grid-cols-2 gap-3">
-        ${statCard('Total Contacts', (o.totalContacts||0).toLocaleString(), '👥', 'indigo')}
-        ${statCard('Messages Sent', (o.totalSent||0).toLocaleString(), '📤', 'blue')}
-        ${statCard('Delivery Rate', o.deliveryRate||'0%', '✅', 'emerald')}
-        ${statCard('Read Rate', o.readRate||'0%', '👁️', 'amber')}
-        ${statCard('Hot Leads', (data.leads?.hot||0).toString(), '🔥', 'red')}
-        ${statCard('Unread Chats', (o.unreadChats||0).toString(), '💬', 'violet')}
+        ${statCard('Total Contacts', contactsSnap.size.toLocaleString(), '👥', 'indigo')}
+        ${statCard('Campaigns', campaigns.length.toString(), '📣', 'blue')}
+        ${statCard('Hot Leads', hotLeads.toString(), '🔥', 'red')}
+        ${statCard('Total Leads', leads.length.toString(), '🎯', 'violet')}
       </div>
-
-      <!-- Recent Campaigns -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl">
         <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
           <h3 class="text-sm font-semibold text-white">Recent Campaigns</h3>
           <button onclick="loadPage('campaigns')" class="text-xs text-indigo-400">View all →</button>
         </div>
         <div class="divide-y divide-zinc-800">
-          ${data.recentCampaigns?.length ? data.recentCampaigns.map(c => `
+          ${campaigns.length ? campaigns.map(c => `
             <div class="px-4 py-3">
               <div class="flex items-center justify-between mb-1">
                 <p class="text-sm font-medium text-white truncate flex-1">${c.name}</p>
-                ${statusBadge(c.status)}
+                ${statusBadge(c.status || 'draft')}
               </div>
               <div class="flex gap-3 text-xs text-zinc-500">
-                <span>📤 ${c.sentCount||0}</span>
-                <span>✅ ${c.deliveredCount||0}</span>
-                <span>👁️ ${c.readCount||0}</span>
-                <span>💬 ${c.replyCount||0}</span>
+                <span>📤 ${c.sentCount||0}</span><span>✅ ${c.deliveredCount||0}</span>
+                <span>👁️ ${c.readCount||0}</span><span>💬 ${c.replyCount||0}</span>
               </div>
-            </div>
-          `).join('') : '<p class="px-4 py-6 text-center text-zinc-600 text-sm">No campaigns yet</p>'}
+            </div>`).join('') : '<p class="px-4 py-6 text-center text-zinc-600 text-sm">No campaigns yet</p>'}
         </div>
       </div>
-
-      <!-- Lead Summary -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
         <h3 class="text-sm font-semibold text-white mb-3">Lead Summary</h3>
         <div class="grid grid-cols-3 gap-2">
           <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
-            <p class="text-2xl font-bold text-red-400">${data.leads?.hot||0}</p>
+            <p class="text-2xl font-bold text-red-400">${hotLeads}</p>
             <p class="text-xs text-zinc-500 mt-0.5">🔥 Hot</p>
           </div>
           <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
-            <p class="text-2xl font-bold text-amber-400">${data.leads?.warm||0}</p>
+            <p class="text-2xl font-bold text-amber-400">${warmLeads}</p>
             <p class="text-xs text-zinc-500 mt-0.5">🌡️ Warm</p>
           </div>
           <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-center">
-            <p class="text-2xl font-bold text-blue-400">${data.leads?.cold||0}</p>
+            <p class="text-2xl font-bold text-blue-400">${coldLeads}</p>
             <p class="text-xs text-zinc-500 mt-0.5">🧊 Cold</p>
           </div>
         </div>
@@ -304,37 +305,33 @@ async function loadDashboard() {
 // CONTACTS PAGE
 // ══════════════════════════════════════════════════════════════════
 async function loadContacts(search = '') {
-  const data = await apiCall(`/contacts?limit=100${search ? '&search='+search : ''}`);
+  const orgId = currentOrg?.id;
+  let snap = await getDocs(query(collection(db, 'contacts'), where('orgId','==',orgId), orderBy('createdAt','desc')));
+  let contacts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (search) {
+    const s = search.toLowerCase();
+    contacts = contacts.filter(c =>
+      (c.name||'').toLowerCase().includes(s) ||
+      (c.phone||'').includes(s) ||
+      (c.city||'').toLowerCase().includes(s)
+    );
+  }
 
   document.getElementById('pageContent').innerHTML = `
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-bold text-white">Contacts</h1>
-          <p class="text-zinc-500 text-sm">${data.total||0} total contacts</p>
+          <p class="text-zinc-500 text-sm">${contacts.length} contacts</p>
         </div>
         <div class="flex gap-2">
-          <button onclick="showImportModal()"
-            class="px-3 py-2 bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl text-xs font-medium">
-            ↑ Import
-          </button>
-          <button onclick="showAddContactModal()"
-            class="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium">
-            + Add
-          </button>
+          <button onclick="showAddContactModal()" class="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium">+ Add</button>
         </div>
       </div>
-
-      <!-- Search -->
-      <input
-        class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500"
-        placeholder="Search by name, phone, city..."
-        oninput="loadContacts(this.value)"
-      />
-
-      <!-- List -->
+      <input class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500"
+        placeholder="Search by name, phone, city..." oninput="loadContacts(this.value)" />
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl divide-y divide-zinc-800">
-        ${data.contacts?.length ? data.contacts.map(c => `
+        ${contacts.length ? contacts.map(c => `
           <div class="px-4 py-3 flex items-center justify-between">
             <div class="flex items-center gap-3 min-w-0">
               <div class="w-9 h-9 rounded-full bg-indigo-600/25 border border-indigo-500/30 flex items-center justify-center text-sm font-bold text-indigo-300 flex-shrink-0">
@@ -342,47 +339,34 @@ async function loadContacts(search = '') {
               </div>
               <div class="min-w-0">
                 <p class="text-sm font-medium text-white truncate">${c.name || 'Unknown'}</p>
-                <p class="text-xs text-zinc-500 font-mono">+${c.phone}</p>
+                <p class="text-xs text-zinc-500 font-mono">${c.phone}</p>
                 ${c.city ? `<p class="text-xs text-zinc-600">${c.city}</p>` : ''}
               </div>
             </div>
-            <div class="flex flex-col items-end gap-1 flex-shrink-0">
-              <span class="text-xs px-2 py-0.5 rounded-full ${c.optIn ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}">
-                ${c.optIn ? 'Opted In' : 'Opted Out'}
-              </span>
-              ${c.tags?.length ? `<span class="text-xs text-zinc-600">${c.tags.slice(0,2).join(', ')}</span>` : ''}
-            </div>
-          </div>
-        `).join('') : `
+            <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${c.optIn !== false ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}">
+              ${c.optIn !== false ? 'Opted In' : 'Opted Out'}
+            </span>
+          </div>`).join('') : `
           <div class="px-4 py-12 text-center">
             <p class="text-zinc-600 text-sm">No contacts yet</p>
             <button onclick="showAddContactModal()" class="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm">Add First Contact</button>
-          </div>
-        `}
+          </div>`}
       </div>
     </div>
-
-    <!-- Add Contact Modal -->
     <div id="addContactModal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-end">
       <div class="bg-zinc-900 border-t border-zinc-700 rounded-t-2xl w-full p-5 space-y-3">
         <h3 class="text-base font-bold text-white">Add Contact</h3>
-        <input id="cPhone" placeholder="Phone number *" class="${inputClass}" />
-        <input id="cName"  placeholder="Full name"      class="${inputClass}" />
-        <input id="cEmail" placeholder="Email"          class="${inputClass}" />
-        <input id="cCity"  placeholder="City"           class="${inputClass}" />
-        <select id="cIndustry" class="${inputClass}">
+        <input id="cPhone" placeholder="Phone number (with country code) *" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
+        <input id="cName"  placeholder="Full name"  class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
+        <input id="cCity"  placeholder="City"       class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
+        <select id="cIndustry" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500">
           <option value="">Select Industry</option>
-          <option>Real Estate</option>
-          <option>Education</option>
-          <option>Ecommerce</option>
-          <option>Coaching</option>
-          <option>Finance</option>
-          <option>Healthcare</option>
-          <option>Other</option>
+          <option>Real Estate</option><option>Education</option><option>Ecommerce</option>
+          <option>Coaching</option><option>Finance</option><option>Healthcare</option><option>Other</option>
         </select>
         <div class="flex gap-2 pt-1">
-          <button onclick="closeModal('addContactModal')" class="${btnSecondary}">Cancel</button>
-          <button onclick="saveContact()" class="${btnPrimary}">Save Contact</button>
+          <button onclick="closeModal('addContactModal')" class="flex-1 py-2.5 bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl text-sm font-medium">Cancel</button>
+          <button onclick="saveContact()" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium">Save Contact</button>
         </div>
       </div>
     </div>
@@ -393,66 +377,47 @@ window.showAddContactModal = () => document.getElementById('addContactModal').cl
 window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 
 window.saveContact = async () => {
-  const phone = document.getElementById('cPhone').value;
+  const phone = document.getElementById('cPhone').value.trim();
   if (!phone) { alert('Phone number is required'); return; }
   try {
-    await apiCall('/contacts', 'POST', {
+    await addDoc(collection(db, 'contacts'), {
       phone,
-      name:     document.getElementById('cName').value,
-      email:    document.getElementById('cEmail').value,
-      city:     document.getElementById('cCity').value,
+      name:     document.getElementById('cName').value.trim(),
+      city:     document.getElementById('cCity').value.trim(),
       industry: document.getElementById('cIndustry').value,
+      orgId:    currentOrg.id,
+      optIn:    true,
+      createdAt: serverTimestamp(),
     });
     closeModal('addContactModal');
     showToast('Contact saved! ✅');
     loadContacts();
-  } catch (e) {
-    alert(e.message);
-  }
-};
-
-window.showImportModal = () => {
-  alert('To import contacts:\n\n1. Prepare a CSV file with columns: phone, name, city, industry\n\n2. Use the API endpoint:\nPOST /api/v1/contacts/import\n\nSee contacts-sample.csv in your GitHub repo for format.');
+  } catch (e) { alert(e.message); }
 };
 
 // ══════════════════════════════════════════════════════════════════
 // CAMPAIGNS PAGE
 // ══════════════════════════════════════════════════════════════════
 async function loadCampaigns() {
-  const data = await apiCall('/campaigns');
+  const orgId = currentOrg?.id;
+  const snap = await getDocs(query(collection(db, 'campaigns'), where('orgId','==',orgId), orderBy('createdAt','desc')));
+  const campaigns = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   document.getElementById('pageContent').innerHTML = `
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-xl font-bold text-white">Campaigns</h1>
-          <p class="text-zinc-500 text-sm">${data.total||0} total</p>
+          <p class="text-zinc-500 text-sm">${campaigns.length} total</p>
         </div>
-        <button onclick="showCreateCampaign()"
-          class="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium">
-          + Create
-        </button>
+        <button onclick="showCreateCampaign()" class="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium">+ Create</button>
       </div>
-
-      <!-- AI Generate Banner -->
-      <div class="bg-gradient-to-r from-indigo-900/50 to-violet-900/30 border border-indigo-500/20 rounded-2xl p-4">
-        <div class="flex items-center gap-2 mb-2">
-          <span class="text-lg">✨</span>
-          <p class="text-sm font-semibold text-white">AI Campaign Generator</p>
-        </div>
-        <p class="text-xs text-zinc-400 mb-3">Describe your goal — AI writes the perfect WhatsApp campaign</p>
-        <button onclick="showAIGenerator()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-medium transition-colors">
-          Generate with AI →
-        </button>
-      </div>
-
-      <!-- Campaign List -->
       <div class="space-y-3">
-        ${data.campaigns?.length ? data.campaigns.map(c => `
+        ${campaigns.length ? campaigns.map(c => `
           <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <div class="flex items-start justify-between mb-2">
               <p class="text-sm font-semibold text-white flex-1 mr-2">${c.name}</p>
-              ${statusBadge(c.status)}
+              ${statusBadge(c.status || 'draft')}
             </div>
             <p class="text-xs text-zinc-500 mb-3">Template: ${c.templateName || 'N/A'}</p>
             <div class="grid grid-cols-4 gap-2 mb-3">
@@ -461,92 +426,42 @@ async function loadCampaigns() {
               ${miniStat('Read', c.readCount||0, '👁️')}
               ${miniStat('Replied', c.replyCount||0, '💬')}
             </div>
-            <div class="flex gap-2">
-              ${c.status === 'draft' || c.status === 'scheduled' ? `
-                <button onclick="launchCampaign('${c.id}')"
-                  class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-medium transition-colors">
-                  🚀 Launch
-                </button>
-              ` : ''}
-              ${c.status === 'running' ? `
-                <button onclick="pauseCampaign('${c.id}')"
-                  class="flex-1 py-2 bg-amber-600 text-white rounded-xl text-xs font-medium">
-                  ⏸️ Pause
-                </button>
-              ` : ''}
-              <button onclick="viewCampaignStats('${c.id}')"
-                class="flex-1 py-2 bg-zinc-800 text-zinc-300 rounded-xl text-xs font-medium">
-                📊 Stats
-              </button>
-            </div>
-          </div>
-        `).join('') : `
+          </div>`).join('') : `
           <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center">
             <p class="text-zinc-600">No campaigns yet</p>
             <button onclick="showCreateCampaign()" class="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm">Create First Campaign</button>
-          </div>
-        `}
+          </div>`}
       </div>
     </div>
-
-    <!-- Create Campaign Modal -->
     <div id="createCampaignModal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-end">
       <div class="bg-zinc-900 border-t border-zinc-700 rounded-t-2xl w-full p-5 space-y-3 max-h-[85vh] overflow-y-auto">
         <h3 class="text-base font-bold text-white">Create Campaign</h3>
-        <input id="campName"     placeholder="Campaign name *"         class="${inputClass}" />
-        <input id="campTemplate" placeholder="WhatsApp template name *" class="${inputClass}" />
-        <input id="campCity"     placeholder="Filter by city (optional)" class="${inputClass}" />
-        <input id="campTag"      placeholder="Filter by tag (optional)"  class="${inputClass}" />
-        <textarea id="campGoal"  placeholder="Campaign goal (for your reference)" rows="2" class="${inputClass} resize-none"></textarea>
+        <input id="campName"     placeholder="Campaign name *"            class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
+        <input id="campTemplate" placeholder="WhatsApp template name *"   class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
+        <textarea id="campGoal"  placeholder="Campaign goal" rows="2"     class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
         <div class="flex gap-2 pt-1">
-          <button onclick="closeModal('createCampaignModal')" class="${btnSecondary}">Cancel</button>
-          <button onclick="saveCampaign()" class="${btnPrimary}">Create Campaign</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- AI Generator Modal -->
-    <div id="aiGeneratorModal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-end">
-      <div class="bg-zinc-900 border-t border-zinc-700 rounded-t-2xl w-full p-5 space-y-3 max-h-[85vh] overflow-y-auto">
-        <div class="flex items-center gap-2">
-          <span class="text-xl">✨</span>
-          <h3 class="text-base font-bold text-white">AI Campaign Generator</h3>
-        </div>
-        <textarea id="aiGoal" rows="3" placeholder="Describe your campaign goal...\n\nExample: Promote our real estate project in Hyderabad to working professionals looking for 2-3 BHK flats" class="${inputClass} resize-none"></textarea>
-        <select id="aiTone" class="${inputClass}">
-          <option value="friendly">Friendly</option>
-          <option value="professional">Professional</option>
-          <option value="urgent">Urgent</option>
-          <option value="festive">Festive</option>
-        </select>
-        <div id="aiResult" class="hidden bg-zinc-800 rounded-xl p-4 space-y-3"></div>
-        <div class="flex gap-2">
-          <button onclick="closeModal('aiGeneratorModal')" class="${btnSecondary}">Cancel</button>
-          <button onclick="generateAICampaign()" id="aiGenerateBtn" class="${btnPrimary}">✨ Generate</button>
+          <button onclick="closeModal('createCampaignModal')" class="flex-1 py-2.5 bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl text-sm font-medium">Cancel</button>
+          <button onclick="saveCampaign()" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium">Create Campaign</button>
         </div>
       </div>
     </div>
   `;
 }
 
-window.showCreateCampaign  = () => document.getElementById('createCampaignModal').classList.remove('hidden');
-window.showAIGenerator     = () => document.getElementById('aiGeneratorModal').classList.remove('hidden');
+window.showCreateCampaign = () => document.getElementById('createCampaignModal').classList.remove('hidden');
 
 window.saveCampaign = async () => {
-  const name     = document.getElementById('campName').value;
-  const template = document.getElementById('campTemplate').value;
+  const name     = document.getElementById('campName').value.trim();
+  const template = document.getElementById('campTemplate').value.trim();
   if (!name || !template) { alert('Name and template are required'); return; }
   try {
-    const filters = {};
-    const city = document.getElementById('campCity').value;
-    const tag  = document.getElementById('campTag').value;
-    if (city) filters.city = city;
-    if (tag)  filters.tag  = tag;
-    await apiCall('/campaigns', 'POST', {
-      name,
-      templateName:    template,
-      segmentFilters:  filters,
-      goal:            document.getElementById('campGoal').value,
+    await addDoc(collection(db, 'campaigns'), {
+      name, templateName: template,
+      goal:      document.getElementById('campGoal').value,
+      orgId:     currentOrg.id,
+      status:    'draft',
+      sentCount: 0, deliveredCount: 0, readCount: 0, replyCount: 0,
+      createdAt: serverTimestamp(),
     });
     closeModal('createCampaignModal');
     showToast('Campaign created! ✅');
@@ -554,173 +469,94 @@ window.saveCampaign = async () => {
   } catch (e) { alert(e.message); }
 };
 
-window.launchCampaign = async (id) => {
-  if (!confirm('Launch this campaign now?')) return;
-  try {
-    const data = await apiCall(`/campaigns/${id}/launch`, 'POST');
-    showToast(`🚀 ${data.message}`);
-    loadCampaigns();
-  } catch (e) { alert(e.message); }
-};
-
-window.pauseCampaign = async (id) => {
-  try {
-    await apiCall(`/campaigns/${id}/pause`, 'POST');
-    showToast('Campaign paused ⏸️');
-    loadCampaigns();
-  } catch (e) { alert(e.message); }
-};
-
-window.viewCampaignStats = async (id) => {
-  try {
-    const data = await apiCall(`/analytics/campaigns/${id}`);
-    const c    = data.campaign;
-    const r    = data.rates;
-    alert(`📊 ${c.name}\n\nStatus: ${c.status}\nContacts: ${c.totalContacts}\n\nSent: ${data.counts.sent}\nDelivered: ${data.counts.delivered} (${r.deliveryRate})\nRead: ${data.counts.read} (${r.readRate})\nReplies: ${data.counts.replies} (${r.replyRate})\nFailed: ${data.counts.failed}`);
-  } catch (e) { alert(e.message); }
-};
-
-window.generateAICampaign = async () => {
-  const goal = document.getElementById('aiGoal').value;
-  if (!goal) { alert('Please describe your campaign goal'); return; }
-  const btn    = document.getElementById('aiGenerateBtn');
-  const result = document.getElementById('aiResult');
-  btn.textContent  = 'Generating...';
-  btn.disabled     = true;
-  result.classList.add('hidden');
-  try {
-    const data = await apiCall('/ai/generate-campaign', 'POST', {
-      goal,
-      tone: document.getElementById('aiTone').value,
-    });
-    result.classList.remove('hidden');
-    result.innerHTML = `
-      <p class="text-xs text-indigo-400 font-semibold mb-2">✨ AI Generated Campaign</p>
-      <p class="text-sm font-bold text-white mb-2">${data.campaignName}</p>
-      <div class="bg-zinc-900 rounded-lg p-3 mb-2">
-        <p class="text-xs text-zinc-500 mb-1">Main Message</p>
-        <p class="text-sm text-zinc-300 whitespace-pre-wrap">${data.mainMessage?.body}</p>
-      </div>
-      <div class="flex gap-3 text-xs">
-        <div class="flex-1 bg-zinc-900 rounded-lg p-2">
-          <p class="text-zinc-500">Best Time</p>
-          <p class="text-amber-400 font-semibold">${data.bestSendTime}</p>
-        </div>
-        <div class="flex-1 bg-zinc-900 rounded-lg p-2">
-          <p class="text-zinc-500">Est. Conversion</p>
-          <p class="text-emerald-400 font-semibold">${data.estimatedConversionRate}</p>
-        </div>
-      </div>
-    `;
-  } catch (e) {
-    alert('AI generation failed: ' + e.message);
-  } finally {
-    btn.textContent = '✨ Generate';
-    btn.disabled    = false;
-  }
-};
-
 // ══════════════════════════════════════════════════════════════════
 // CHAT PAGE
 // ══════════════════════════════════════════════════════════════════
 async function loadChat() {
-  const data = await apiCall('/chat/conversations');
+  const orgId = currentOrg?.id;
+  const snap = await getDocs(query(collection(db, 'conversations'), where('orgId','==',orgId), orderBy('lastMessageAt','desc')));
+  const convs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const unread = convs.filter(c => c.unreadCount > 0).length;
 
   document.getElementById('pageContent').innerHTML = `
     <div class="space-y-4">
       <div>
         <h1 class="text-xl font-bold text-white">Chat Inbox</h1>
-        <p class="text-zinc-500 text-sm">${data.unread||0} unread conversations</p>
+        <p class="text-zinc-500 text-sm">${unread} unread conversations</p>
       </div>
-
       <div class="space-y-2">
-        ${data.conversations?.length ? data.conversations.map(c => `
-          <div onclick="openConversation('${c.contactId}')"
+        ${convs.length ? convs.map(c => `
+          <div onclick="openConversation('${c.id}')"
             class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 cursor-pointer hover:border-zinc-600 transition-colors">
             <div class="flex items-start gap-3">
               <div class="w-10 h-10 rounded-full bg-indigo-600/25 border border-indigo-500/30 flex items-center justify-center text-sm font-bold text-indigo-300 flex-shrink-0">
-                ${(c.contactName||c.contactId||'?')[0].toUpperCase()}
+                ${(c.contactName||'?')[0].toUpperCase()}
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between mb-1">
-                  <p class="text-sm font-semibold text-white truncate">${c.contactName || c.contactId}</p>
-                  <span class="text-xs text-zinc-600 flex-shrink-0 ml-2">${formatTime(c.lastMessageAt)}</span>
+                  <p class="text-sm font-semibold text-white truncate">${c.contactName || c.contactPhone || 'Unknown'}</p>
+                  <span class="text-xs text-zinc-600 flex-shrink-0 ml-2">${formatTime(c.lastMessageAt?.toDate?.()?.toISOString())}</span>
                 </div>
                 <p class="text-xs text-zinc-500 truncate">${c.lastMessage||'No messages yet'}</p>
                 <div class="flex items-center gap-2 mt-1">
-                  ${statusBadge(c.status)}
+                  ${statusBadge(c.status||'open')}
                   ${c.unreadCount > 0 ? `<span class="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded-full">${c.unreadCount}</span>` : ''}
                 </div>
               </div>
             </div>
-          </div>
-        `).join('') : `
+          </div>`).join('') : `
           <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center">
             <p class="text-zinc-600 text-sm">No conversations yet</p>
             <p class="text-zinc-700 text-xs mt-1">Messages from customers will appear here</p>
-          </div>
-        `}
+          </div>`}
       </div>
     </div>
   `;
 }
 
-window.openConversation = async (contactId) => {
-  const data = await apiCall(`/chat/conversations/${contactId}/messages`);
-  const conv = await apiCall(`/chat/conversations/${contactId}`);
+window.openConversation = async (convId) => {
+  const msgSnap = await getDocs(query(collection(db, 'conversations', convId, 'messages'), orderBy('createdAt','asc')));
+  const convDoc = await getDoc(doc(db, 'conversations', convId));
+  const conv    = convDoc.data();
+  const msgs    = msgSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   document.getElementById('pageContent').innerHTML = `
     <div class="flex flex-col h-[calc(100vh-8rem)]">
-      <!-- Header -->
       <div class="flex items-center gap-3 pb-3 border-b border-zinc-800 mb-3">
         <button onclick="loadChat()" class="text-zinc-500 hover:text-white">←</button>
         <div class="w-8 h-8 rounded-full bg-indigo-600/25 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">
-          ${(conv.contactName||contactId||'?')[0].toUpperCase()}
+          ${(conv?.contactName||'?')[0].toUpperCase()}
         </div>
-        <div class="flex-1">
-          <p class="text-sm font-semibold text-white">${conv.contactName || contactId}</p>
-          <p class="text-xs text-zinc-500">+${contactId}</p>
-        </div>
-        ${statusBadge(conv.status)}
+        <p class="text-sm font-semibold text-white">${conv?.contactName || conv?.contactPhone || 'Unknown'}</p>
       </div>
-
-      <!-- Messages -->
-      <div class="flex-1 overflow-y-auto space-y-2 pb-3" id="messagesList">
-        ${data.messages?.length ? data.messages.map(m => `
+      <div class="flex-1 overflow-y-auto space-y-3 mb-3">
+        ${msgs.length ? msgs.map(m => `
           <div class="flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
-            <div class="max-w-[80%] rounded-2xl px-3 py-2 ${m.direction === 'outbound' ? 'bg-indigo-600 text-white rounded-br-sm' : 'bg-zinc-800 text-zinc-200 rounded-bl-sm'}">
-              <p class="text-sm">${m.content}</p>
-              <p class="text-xs opacity-50 mt-0.5 text-right">${formatTime(m.createdAt)} ${m.aiHandled ? '🤖' : ''}</p>
+            <div class="max-w-[80%] px-3 py-2 rounded-2xl text-sm ${m.direction === 'outbound' ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-200'}">
+              ${m.text || ''}
             </div>
-          </div>
-        `).join('') : '<p class="text-center text-zinc-600 text-sm py-4">No messages yet</p>'}
+          </div>`).join('') : '<p class="text-center text-zinc-600 text-sm py-8">No messages yet</p>'}
       </div>
-
-      <!-- Input -->
-      <div class="flex gap-2 pt-3 border-t border-zinc-800">
-        <input id="replyText" placeholder="Type a message..."
-          class="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500"
-          onkeydown="if(event.key==='Enter') sendReply('${contactId}')" />
-        <button onclick="sendReply('${contactId}')"
-          class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm transition-colors">
-          Send
-        </button>
+      <div class="flex gap-2">
+        <input id="replyInput" placeholder="Type a message..." class="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
+        <button onclick="sendReply('${convId}')" class="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium">Send</button>
       </div>
     </div>
   `;
-
-  // Scroll to bottom
-  const list = document.getElementById('messagesList');
-  if (list) list.scrollTop = list.scrollHeight;
 };
 
-window.sendReply = async (contactId) => {
-  const text = document.getElementById('replyText').value.trim();
+window.sendReply = async (convId) => {
+  const text = document.getElementById('replyInput').value.trim();
   if (!text) return;
   try {
-    await apiCall(`/chat/conversations/${contactId}/send`, 'POST', { text });
-    document.getElementById('replyText').value = '';
-    openConversation(contactId);
+    await addDoc(collection(db, 'conversations', convId, 'messages'), {
+      text, direction: 'outbound', createdAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, 'conversations', convId), {
+      lastMessage: text, lastMessageAt: serverTimestamp(),
+    });
+    showToast('Message sent ✅');
+    openConversation(convId);
   } catch (e) { alert(e.message); }
 };
 
@@ -728,110 +564,57 @@ window.sendReply = async (contactId) => {
 // LEADS PAGE
 // ══════════════════════════════════════════════════════════════════
 async function loadLeads(filter = '') {
-  const url  = filter ? `/leads?label=${filter}` : '/leads';
-  const data = await apiCall(url);
+  const orgId = currentOrg?.id;
+  let snap = await getDocs(query(collection(db, 'leads'), where('orgId','==',orgId), orderBy('score','desc')));
+  let leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (filter) leads = leads.filter(l => l.scoreLabel === filter);
 
   document.getElementById('pageContent').innerHTML = `
     <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-xl font-bold text-white">Leads</h1>
-          <p class="text-zinc-500 text-sm">${data.counts?.total||0} total leads</p>
-        </div>
-        <button onclick="scoreAllLeads()"
-          class="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium">
-          ✨ Score All
-        </button>
+      <div>
+        <h1 class="text-xl font-bold text-white">Leads</h1>
+        <p class="text-zinc-500 text-sm">${leads.length} leads</p>
       </div>
-
-      <!-- Filter Tabs -->
-      <div class="flex gap-2">
-        ${['', 'hot', 'warm', 'cold'].map(f => `
+      <div class="flex gap-2 overflow-x-auto pb-1">
+        ${['','Hot','Warm','Cold'].map(f => `
           <button onclick="loadLeads('${f}')"
-            class="px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${filter === f ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400'}">
-            ${f === '' ? 'All' : f === 'hot' ? '🔥 Hot' : f === 'warm' ? '🌡️ Warm' : '🧊 Cold'}
-            <span class="ml-1 opacity-70">${f === '' ? data.counts?.total||0 : data.counts?.[f]||0}</span>
-          </button>
-        `).join('')}
+            class="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${filter===f ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-zinc-900 text-zinc-400 border-zinc-700'}">
+            ${f || 'All'}
+          </button>`).join('')}
       </div>
-
-      <!-- Lead Cards -->
       <div class="space-y-3">
-        ${data.leads?.length ? data.leads.map(l => `
+        ${leads.length ? leads.map(l => `
           <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
             <div class="flex items-start justify-between mb-2">
-              <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-full bg-indigo-600/25 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300">
-                  ${(l.contactName||'?')[0].toUpperCase()}
-                </div>
-                <div>
-                  <p class="text-sm font-semibold text-white">${l.contactName || 'Unknown'}</p>
-                  <p class="text-xs text-zinc-500 font-mono">+${l.contactPhone}</p>
-                </div>
+              <div>
+                <p class="text-sm font-semibold text-white">${l.contactName || l.contactPhone || 'Unknown'}</p>
+                <p class="text-xs text-zinc-500">${l.contactPhone || ''}</p>
               </div>
-              <span class="text-xs px-2 py-0.5 rounded-full border ${l.scoreLabel === 'hot' ? 'bg-red-500/15 text-red-400 border-red-500/30' : l.scoreLabel === 'warm' ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-blue-500/15 text-blue-400 border-blue-500/30'}">
-                ${l.scoreLabel === 'hot' ? '🔥' : l.scoreLabel === 'warm' ? '🌡️' : '🧊'} ${l.scoreLabel}
-              </span>
-            </div>
-
-            <!-- Score Bar -->
-            <div class="flex items-center gap-2 mb-2">
-              <div class="flex-1 bg-zinc-800 rounded-full h-1.5">
-                <div class="rounded-full h-1.5 ${l.scoreLabel === 'hot' ? 'bg-red-500' : l.scoreLabel === 'warm' ? 'bg-amber-500' : 'bg-blue-500'}"
-                     style="width: ${l.score||0}%"></div>
+              <div class="text-right">
+                <p class="text-lg font-bold ${l.scoreLabel==='Hot'?'text-red-400':l.scoreLabel==='Warm'?'text-amber-400':'text-blue-400'}">${l.score||0}/100</p>
+                <p class="text-xs text-zinc-500">${l.scoreLabel || 'Unscored'}</p>
               </div>
-              <span class="text-xs font-mono text-zinc-400">${l.score||0}/100</span>
             </div>
-
-            ${l.nextAction ? `<p class="text-xs text-zinc-500 mb-2">${l.nextAction}</p>` : ''}
-
+            ${l.reason ? `<p class="text-xs text-zinc-500 mb-2">${l.reason}</p>` : ''}
             <div class="flex gap-2">
-              <button onclick="openConversation('${l.contactPhone}')"
-                class="flex-1 py-1.5 bg-zinc-800 text-zinc-300 rounded-xl text-xs font-medium">
-                💬 Chat
-              </button>
-              <button onclick="scoreSingleLead('${l.contactId}')"
-                class="flex-1 py-1.5 bg-zinc-800 text-zinc-300 rounded-xl text-xs font-medium">
-                ✨ Re-score
-              </button>
-              <button onclick="convertLead('${l.id}')"
-                class="flex-1 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-medium">
-                ✅ Convert
-              </button>
+              <button onclick="convertLead('${l.id}')" class="flex-1 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-medium">✅ Convert</button>
             </div>
-          </div>
-        `).join('') : `
+          </div>`).join('') : `
           <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center">
             <p class="text-zinc-600 text-sm">No leads yet</p>
-            <button onclick="scoreAllLeads()" class="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm">Score Contacts as Leads</button>
-          </div>
-        `}
+            <p class="text-zinc-700 text-xs mt-1">Leads will appear here as contacts engage</p>
+          </div>`}
       </div>
     </div>
   `;
 }
 
-window.scoreAllLeads = async () => {
-  try {
-    showToast('Scoring all leads... ✨');
-    await apiCall('/ai/score-all-leads', 'POST');
-    showToast('All leads scored! 🎯');
-    setTimeout(() => loadLeads(), 2000);
-  } catch (e) { alert(e.message); }
-};
-
-window.scoreSingleLead = async (contactId) => {
-  try {
-    const data = await apiCall('/ai/score-lead', 'POST', { contactId });
-    showToast(`Score: ${data.score}/100 — ${data.emoji} ${data.scoreLabel}`);
-    loadLeads();
-  } catch (e) { alert(e.message); }
-};
-
 window.convertLead = async (leadId) => {
   const value = prompt('Deal value in ₹ (optional):');
   try {
-    await apiCall(`/leads/${leadId}/convert`, 'POST', { dealValue: parseInt(value)||0 });
+    await updateDoc(doc(db, 'leads', leadId), {
+      status: 'converted', dealValue: parseInt(value)||0, convertedAt: serverTimestamp(),
+    });
     showToast('🎉 Lead converted!');
     loadLeads();
   } catch (e) { alert(e.message); }
@@ -841,60 +624,53 @@ window.convertLead = async (leadId) => {
 // ANALYTICS PAGE
 // ══════════════════════════════════════════════════════════════════
 async function loadAnalytics() {
-  const [dashboard, contacts] = await Promise.all([
-    apiCall('/analytics/dashboard'),
-    apiCall('/analytics/contacts'),
+  const orgId = currentOrg?.id;
+  const [contactsSnap, campaignsSnap, leadsSnap] = await Promise.all([
+    getDocs(query(collection(db, 'contacts'),  where('orgId','==',orgId))),
+    getDocs(query(collection(db, 'campaigns'), where('orgId','==',orgId))),
+    getDocs(query(collection(db, 'leads'),     where('orgId','==',orgId))),
   ]);
-  const o = dashboard.overview;
+
+  const contacts  = contactsSnap.docs.map(d => d.data());
+  const campaigns = campaignsSnap.docs.map(d => d.data());
+  const leads     = leadsSnap.docs.map(d => d.data());
+
+  const optedIn   = contacts.filter(c => c.optIn !== false).length;
+  const totalSent = campaigns.reduce((a,c) => a+(c.sentCount||0), 0);
+  const totalDel  = campaigns.reduce((a,c) => a+(c.deliveredCount||0), 0);
+  const totalRead = campaigns.reduce((a,c) => a+(c.readCount||0), 0);
+  const cityMap   = {};
+  contacts.forEach(c => { if (c.city) cityMap[c.city] = (cityMap[c.city]||0)+1; });
+  const topCities = Object.entries(cityMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
   document.getElementById('pageContent').innerHTML = `
     <div class="space-y-4">
       <h1 class="text-xl font-bold text-white">Analytics</h1>
-
-      <!-- Message Stats -->
+      <div class="grid grid-cols-2 gap-3">
+        ${statCard('Contacts', contacts.length, '👥', 'indigo')}
+        ${statCard('Opted In', optedIn, '✅', 'emerald')}
+        ${statCard('Campaigns', campaigns.length, '📣', 'blue')}
+        ${statCard('Leads', leads.length, '🎯', 'violet')}
+      </div>
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
         <h3 class="text-sm font-semibold text-white mb-3">Message Performance</h3>
         <div class="space-y-3">
-          ${progressStat('Sent',      o.totalSent||0,      o.totalSent||1,      'indigo')}
-          ${progressStat('Delivered', o.totalDelivered||0, o.totalSent||1,      'blue')}
-          ${progressStat('Read',      o.totalRead||0,      o.totalDelivered||1, 'emerald')}
-          ${progressStat('Replied',   o.totalReplies||0,   o.totalSent||1,      'amber')}
+          ${progressStat('Sent',      totalSent, totalSent||1, 'indigo')}
+          ${progressStat('Delivered', totalDel,  totalSent||1, 'blue')}
+          ${progressStat('Read',      totalRead, totalDel||1,  'emerald')}
         </div>
       </div>
-
-      <!-- Rates -->
-      <div class="grid grid-cols-3 gap-3">
-        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 text-center">
-          <p class="text-xl font-bold text-emerald-400">${o.deliveryRate||'0%'}</p>
-          <p class="text-xs text-zinc-500 mt-0.5">Delivery</p>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 text-center">
-          <p class="text-xl font-bold text-blue-400">${o.readRate||'0%'}</p>
-          <p class="text-xs text-zinc-500 mt-0.5">Read Rate</p>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 text-center">
-          <p class="text-xl font-bold text-amber-400">${o.replyRate||'0%'}</p>
-          <p class="text-xs text-zinc-500 mt-0.5">Reply Rate</p>
-        </div>
-      </div>
-
-      <!-- Contact Stats -->
+      ${topCities.length ? `
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-        <h3 class="text-sm font-semibold text-white mb-3">Contact Overview</h3>
-        <div class="grid grid-cols-2 gap-3 mb-3">
-          ${statCard('Total', contacts.total||0, '👥', 'indigo')}
-          ${statCard('Opted In', contacts.optedIn||0, '✅', 'emerald')}
-        </div>
-        <h4 class="text-xs text-zinc-500 mb-2 mt-3">Top Cities</h4>
+        <h3 class="text-sm font-semibold text-white mb-3">Top Cities</h3>
         <div class="space-y-1.5">
-          ${contacts.topCities?.slice(0,5).map(c => `
+          ${topCities.map(([city, count]) => `
             <div class="flex items-center justify-between">
-              <span class="text-xs text-zinc-400">${c.city}</span>
-              <span class="text-xs font-semibold text-white">${c.count}</span>
-            </div>
-          `).join('') || '<p class="text-xs text-zinc-600">No data yet</p>'}
+              <span class="text-xs text-zinc-400">${city}</span>
+              <span class="text-xs font-semibold text-white">${count}</span>
+            </div>`).join('')}
         </div>
-      </div>
+      </div>` : ''}
     </div>
   `;
 }
@@ -906,27 +682,13 @@ function loadSettings() {
   document.getElementById('pageContent').innerHTML = `
     <div class="space-y-4">
       <h1 class="text-xl font-bold text-white">Settings</h1>
-
-      <!-- Org Info -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
         <h3 class="text-sm font-semibold text-white">Organization</h3>
         <div class="space-y-1 text-sm">
-          <div class="flex justify-between">
-            <span class="text-zinc-500">Name</span>
-            <span class="text-white">${currentOrg?.name || 'N/A'}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-zinc-500">Plan</span>
-            <span class="text-indigo-400 font-semibold uppercase">${currentOrg?.plan || 'trial'}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-zinc-500">Messages Used</span>
-            <span class="text-white">${currentOrg?.messagesUsed||0} / ${currentOrg?.messageLimit||0}</span>
-          </div>
+          <div class="flex justify-between"><span class="text-zinc-500">Name</span><span class="text-white">${currentOrg?.name || 'N/A'}</span></div>
+          <div class="flex justify-between"><span class="text-zinc-500">Plan</span><span class="text-indigo-400 font-semibold uppercase">${currentOrg?.plan || 'free'}</span></div>
         </div>
       </div>
-
-      <!-- WhatsApp Setup -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
         <h3 class="text-sm font-semibold text-white">WhatsApp Connection</h3>
         <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
@@ -934,16 +696,11 @@ function loadSettings() {
           <ol class="text-xs text-zinc-400 mt-2 space-y-1 list-decimal list-inside">
             <li>Go to developers.facebook.com</li>
             <li>Create App → Business → WhatsApp</li>
-            <li>Get Phone Number ID & Access Token</li>
+            <li>Get Phone Number ID &amp; Access Token</li>
             <li>Set webhook URL in Meta dashboard</li>
           </ol>
         </div>
-        <input id="waPhoneId"  placeholder="Phone Number ID"  class="${inputClass}" value="${currentOrg?.phoneNumberId||''}" />
-        <input id="waToken"    placeholder="Access Token"     class="${inputClass}" type="password" />
-        <button onclick="saveWASettings()" class="${btnPrimary}">Save WhatsApp Settings</button>
       </div>
-
-      <!-- Account -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3">
         <h3 class="text-sm font-semibold text-white">Account</h3>
         <div class="text-sm">
@@ -952,14 +709,14 @@ function loadSettings() {
             <span class="text-white">${currentUser?.email}</span>
           </div>
         </div>
-        <button onclick="handleLogout()"
-          class="w-full py-2.5 bg-red-600/20 border border-red-500/30 text-red-400 rounded-xl text-sm font-medium">
+        <button onclick="handleLogout()" class="w-full py-2.5 bg-red-600/20 border border-red-500/30 text-red-400 rounded-xl text-sm font-medium">
           Sign Out
         </button>
       </div>
     </div>
   `;
 }
+
 
 window.saveWASettings = async () => {
   const phoneNumberId = document.getElementById('waPhoneId').value;
