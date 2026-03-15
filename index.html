@@ -221,11 +221,11 @@ async function loadDashboard() {
   const orgId = currentOrg?.id;
   const [contactsSnap, campaignsSnap, leadsSnap] = await Promise.all([
     getDocs(query(collection(db, 'contacts'),  where('orgId','==',orgId))),
-    getDocs(query(collection(db, 'campaigns'), where('orgId','==',orgId), orderBy('createdAt','desc'), limit(5))),
+    getDocs(query(collection(db, 'campaigns'), where('orgId','==',orgId))),
     getDocs(query(collection(db, 'leads'),     where('orgId','==',orgId))),
   ]);
 
-  const campaigns  = campaignsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const campaigns  = campaignsSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).slice(0,5);
   const leads      = leadsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   const hotLeads   = leads.filter(l => l.scoreLabel === 'Hot').length;
   const warmLeads  = leads.filter(l => l.scoreLabel === 'Warm').length;
@@ -306,8 +306,8 @@ async function loadDashboard() {
 // ══════════════════════════════════════════════════════════════════
 async function loadContacts(search = '') {
   const orgId = currentOrg?.id;
-  let snap = await getDocs(query(collection(db, 'contacts'), where('orgId','==',orgId), orderBy('createdAt','desc')));
-  let contacts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  let snap = await getDocs(query(collection(db, 'contacts'), where('orgId','==',orgId)));
+  let contacts = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
   if (search) {
     const s = search.toLowerCase();
     contacts = contacts.filter(c =>
@@ -400,8 +400,8 @@ window.saveContact = async () => {
 // ══════════════════════════════════════════════════════════════════
 async function loadCampaigns() {
   const orgId = currentOrg?.id;
-  const snap = await getDocs(query(collection(db, 'campaigns'), where('orgId','==',orgId), orderBy('createdAt','desc')));
-  const campaigns = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(query(collection(db, 'campaigns'), where('orgId','==',orgId)));
+  const campaigns = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
 
   document.getElementById('pageContent').innerHTML = `
     <div class="space-y-4">
@@ -474,8 +474,8 @@ window.saveCampaign = async () => {
 // ══════════════════════════════════════════════════════════════════
 async function loadChat() {
   const orgId = currentOrg?.id;
-  const snap = await getDocs(query(collection(db, 'conversations'), where('orgId','==',orgId), orderBy('lastMessageAt','desc')));
-  const convs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const snap = await getDocs(query(collection(db, 'conversations'), where('orgId','==',orgId)));
+  const convs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.lastMessageAt?.seconds||0)-(a.lastMessageAt?.seconds||0));
   const unread = convs.filter(c => c.unreadCount > 0).length;
 
   document.getElementById('pageContent').innerHTML = `
@@ -515,10 +515,10 @@ async function loadChat() {
 }
 
 window.openConversation = async (convId) => {
-  const msgSnap = await getDocs(query(collection(db, 'conversations', convId, 'messages'), orderBy('createdAt','asc')));
+  const msgSnap = await getDocs(collection(db, 'conversations', convId, 'messages'));
   const convDoc = await getDoc(doc(db, 'conversations', convId));
   const conv    = convDoc.data();
-  const msgs    = msgSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const msgs    = msgSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (a.createdAt?.seconds||0)-(b.createdAt?.seconds||0));
 
   document.getElementById('pageContent').innerHTML = `
     <div class="flex flex-col h-[calc(100vh-8rem)]">
@@ -565,8 +565,8 @@ window.sendReply = async (convId) => {
 // ══════════════════════════════════════════════════════════════════
 async function loadLeads(filter = '') {
   const orgId = currentOrg?.id;
-  let snap = await getDocs(query(collection(db, 'leads'), where('orgId','==',orgId), orderBy('score','desc')));
-  let leads = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  let snap = await getDocs(query(collection(db, 'leads'), where('orgId','==',orgId)));
+  let leads = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (b.score||0)-(a.score||0));
   if (filter) leads = leads.filter(l => l.scoreLabel === filter);
 
   document.getElementById('pageContent').innerHTML = `
