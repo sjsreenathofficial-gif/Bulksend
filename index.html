@@ -419,7 +419,7 @@ async function loadCampaigns() {
               <p class="text-sm font-semibold text-white flex-1 mr-2">${c.name}</p>
               ${statusBadge(c.status || 'draft')}
             </div>
-            <p class="text-xs text-zinc-500 mb-3">Template: ${c.templateName || 'N/A'}</p>
+            <p class="text-xs text-zinc-500 mb-3">${c.recipientCount ? c.recipientCount + ' recipients' : 'No recipients set'}</p>
             <div class="grid grid-cols-4 gap-2 mb-3">
               ${miniStat('Sent', c.sentCount||0, '📤')}
               ${miniStat('Delivered', c.deliveredCount||0, '✅')}
@@ -433,38 +433,154 @@ async function loadCampaigns() {
           </div>`}
       </div>
     </div>
-    <div id="createCampaignModal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-end">
-      <div class="bg-zinc-900 border-t border-zinc-700 rounded-t-2xl w-full p-5 space-y-3 max-h-[85vh] overflow-y-auto">
+        <div id="createCampaignModal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-end">
+      <div class="bg-zinc-900 border-t border-zinc-700 rounded-t-2xl w-full p-5 space-y-3 max-h-[90vh] overflow-y-auto">
         <h3 class="text-base font-bold text-white">Create Campaign</h3>
-        <input id="campName"     placeholder="Campaign name *"            class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
-        <input id="campTemplate" placeholder="WhatsApp template name *"   class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
-        <textarea id="campGoal"  placeholder="Campaign goal" rows="2"     class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
+
+        <input id="campName" placeholder="Campaign name *"
+          class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500" />
+
+        <textarea id="campMessage" placeholder="Message to send *&#10;&#10;Use {{name}} to personalise with contact name" rows="4"
+          class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
+
+        <div>
+          <p class="text-xs text-zinc-400 mb-2 font-medium">Select Recipients</p>
+          <div class="flex gap-2 mb-3">
+            <button onclick="setCampSource('all')" id="srcAll"
+              class="flex-1 py-2 rounded-xl text-xs font-medium border bg-indigo-600 text-white border-indigo-500">All Contacts</button>
+            <button onclick="setCampSource('csv')" id="srcCsv"
+              class="flex-1 py-2 rounded-xl text-xs font-medium border bg-zinc-800 text-zinc-400 border-zinc-700">Upload CSV</button>
+            <button onclick="setCampSource('manual')" id="srcManual"
+              class="flex-1 py-2 rounded-xl text-xs font-medium border bg-zinc-800 text-zinc-400 border-zinc-700">Enter Numbers</button>
+          </div>
+
+          <div id="sourceAll" class="bg-zinc-800 rounded-xl p-3">
+            <p class="text-xs text-zinc-400">Will send to all opted-in contacts in your org</p>
+            <p id="allContactCount" class="text-xs text-indigo-400 mt-1 font-semibold"></p>
+          </div>
+
+          <div id="sourceCsv" class="hidden space-y-2">
+            <div class="bg-zinc-800 rounded-xl p-3">
+              <p class="text-xs text-zinc-400 mb-2">Upload CSV with a <b class="text-white">phone</b> column (and optional <b class="text-white">name</b> column)</p>
+              <input id="campCsvFile" type="file" accept=".csv" onchange="parseCampaignCSV(this)"
+                class="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-indigo-600 file:text-white" />
+            </div>
+            <div id="csvPreview" class="hidden bg-zinc-800 rounded-xl p-3">
+              <p id="csvCount" class="text-xs text-emerald-400 font-semibold"></p>
+              <div id="csvSample" class="mt-2 space-y-1"></div>
+            </div>
+          </div>
+
+          <div id="sourceManual" class="hidden">
+            <textarea id="campManualNumbers" rows="4"
+              placeholder="Enter phone numbers, one per line&#10;e.g. 919876543210"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
+            <p class="text-xs text-zinc-600 mt-1">Include country code, no + or spaces (e.g. 919876543210)</p>
+          </div>
+        </div>
+
+        <div>
+          <p class="text-xs text-zinc-400 mb-2 font-medium">Schedule (optional)</p>
+          <input id="campSchedule" type="datetime-local"
+            class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
+          <p class="text-xs text-zinc-600 mt-1">Leave empty to save as draft</p>
+        </div>
+
         <div class="flex gap-2 pt-1">
-          <button onclick="closeModal('createCampaignModal')" class="flex-1 py-2.5 bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl text-sm font-medium">Cancel</button>
-          <button onclick="saveCampaign()" class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium">Create Campaign</button>
+          <button onclick="closeModal('createCampaignModal')"
+            class="flex-1 py-2.5 bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-xl text-sm font-medium">Cancel</button>
+          <button onclick="saveCampaign()"
+            class="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium">Create</button>
         </div>
       </div>
     </div>
   `;
+
+  try {
+    const snap = await getDocs(query(collection(db, 'contacts'), where('orgId','==', currentOrg.id)));
+    const opted = snap.docs.filter(d => d.data().optIn !== false).length;
+    const el = document.getElementById('allContactCount');
+    if (el) el.textContent = opted + ' contacts will receive this message';
+  } catch(e) {}
 }
 
-window.showCreateCampaign = () => document.getElementById('createCampaignModal').classList.remove('hidden');
+let campContactSource = 'all';
+let campCSVContacts   = [];
+
+window.setCampSource = (source) => {
+  campContactSource = source;
+  ['all','csv','manual'].forEach(s => {
+    const key = s.charAt(0).toUpperCase() + s.slice(1);
+    const btn   = document.getElementById('src' + key);
+    const panel = document.getElementById('source' + key);
+    if (btn) btn.className = s === source
+      ? 'flex-1 py-2 rounded-xl text-xs font-medium border bg-indigo-600 text-white border-indigo-500'
+      : 'flex-1 py-2 rounded-xl text-xs font-medium border bg-zinc-800 text-zinc-400 border-zinc-700';
+    if (panel) panel.classList.toggle('hidden', s !== source);
+  });
+};
+
+window.parseCampaignCSV = (input) => {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const lines   = e.target.result.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g,''));
+    const phoneIdx = headers.indexOf('phone');
+    const nameIdx  = headers.indexOf('name');
+    if (phoneIdx === -1) { alert('CSV must have a "phone" column'); return; }
+    campCSVContacts = lines.slice(1).map(line => {
+      const cols = line.split(',').map(c => c.trim().replace(/"/g,''));
+      return { phone: cols[phoneIdx], name: nameIdx > -1 ? cols[nameIdx] : '' };
+    }).filter(c => c.phone);
+    document.getElementById('csvPreview').classList.remove('hidden');
+    document.getElementById('csvCount').textContent = campCSVContacts.length + ' contacts loaded from CSV';
+    document.getElementById('csvSample').innerHTML = campCSVContacts.slice(0,3).map(c =>
+      '<p class="text-xs text-zinc-400">' + (c.name||'Unknown') + ' \u2014 ' + c.phone + '</p>'
+    ).join('') + (campCSVContacts.length > 3 ? '<p class="text-xs text-zinc-600">...and ' + (campCSVContacts.length-3) + ' more</p>' : '');
+  };
+  reader.readAsText(file);
+};
+
+window.showCreateCampaign = () => {
+  campContactSource = 'all';
+  campCSVContacts   = [];
+  document.getElementById('createCampaignModal').classList.remove('hidden');
+};
 
 window.saveCampaign = async () => {
-  const name     = document.getElementById('campName').value.trim();
-  const template = document.getElementById('campTemplate').value.trim();
-  if (!name || !template) { alert('Name and template are required'); return; }
+  const name    = document.getElementById('campName').value.trim();
+  const message = document.getElementById('campMessage').value.trim();
+  if (!name || !message) { alert('Campaign name and message are required'); return; }
+
+  let recipients = [];
+  if (campContactSource === 'all') {
+    const snap = await getDocs(query(collection(db, 'contacts'), where('orgId','==', currentOrg.id)));
+    recipients  = snap.docs.filter(d => d.data().optIn !== false).map(d => ({ phone: d.data().phone, name: d.data().name||'' }));
+  } else if (campContactSource === 'csv') {
+    recipients = campCSVContacts;
+    if (!recipients.length) { alert('Please upload a CSV file with contacts'); return; }
+  } else {
+    const lines = document.getElementById('campManualNumbers').value.trim().split('\n');
+    recipients  = lines.map(l => ({ phone: l.trim(), name: '' })).filter(c => c.phone);
+    if (!recipients.length) { alert('Please enter at least one phone number'); return; }
+  }
+
+  const scheduledAt = document.getElementById('campSchedule').value;
   try {
     await addDoc(collection(db, 'campaigns'), {
-      name, templateName: template,
-      goal:      document.getElementById('campGoal').value,
-      orgId:     currentOrg.id,
-      status:    'draft',
+      name, message,
+      orgId:          currentOrg.id,
+      status:         scheduledAt ? 'scheduled' : 'draft',
+      recipientCount: recipients.length,
+      recipients,
+      scheduledAt:    scheduledAt || null,
       sentCount: 0, deliveredCount: 0, readCount: 0, replyCount: 0,
       createdAt: serverTimestamp(),
     });
     closeModal('createCampaignModal');
-    showToast('Campaign created! ✅');
+    showToast('Campaign created with ' + recipients.length + ' recipients! \u2705');
     loadCampaigns();
   } catch (e) { alert(e.message); }
 };
@@ -911,22 +1027,24 @@ window.toggleAuthMode = () => {
   <!-- Bottom Navigation -->
   <nav class="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 px-2 py-2 z-40">
     <div class="flex justify-around">
-      ${[
-        { page: 'dashboard', icon: '⊞',  label: 'Home'      },
-        { page: 'contacts',  icon: '👥', label: 'Contacts'  },
-        { page: 'campaigns', icon: '📣', label: 'Campaigns' },
-        { page: 'chat',      icon: '💬', label: 'Inbox'     },
-        { page: 'leads',     icon: '🎯', label: 'Leads'     },
-        { page: 'settings',  icon: '⚙️', label: 'Settings'  },
-      ].map(item => `
-        <button
-          data-page="${item.page}"
-          onclick="loadPage('${item.page}')"
-          class="nav-item flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all text-zinc-400">
-          <span class="text-lg leading-none">${item.icon}</span>
-          <span class="text-xs">${item.label}</span>
-        </button>
-      `).join('')}
+      <button data-page="dashboard" onclick="loadPage('dashboard')" class="nav-item flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all text-zinc-400">
+        <span class="text-lg leading-none">&#8862;</span><span class="text-xs">Home</span>
+      </button>
+      <button data-page="contacts" onclick="loadPage('contacts')" class="nav-item flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all text-zinc-400">
+        <span class="text-lg leading-none">&#128101;</span><span class="text-xs">Contacts</span>
+      </button>
+      <button data-page="campaigns" onclick="loadPage('campaigns')" class="nav-item flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all text-zinc-400">
+        <span class="text-lg leading-none">&#128227;</span><span class="text-xs">Campaigns</span>
+      </button>
+      <button data-page="chat" onclick="loadPage('chat')" class="nav-item flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all text-zinc-400">
+        <span class="text-lg leading-none">&#128172;</span><span class="text-xs">Inbox</span>
+      </button>
+      <button data-page="leads" onclick="loadPage('leads')" class="nav-item flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all text-zinc-400">
+        <span class="text-lg leading-none">&#127919;</span><span class="text-xs">Leads</span>
+      </button>
+      <button data-page="settings" onclick="loadPage('settings')" class="nav-item flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all text-zinc-400">
+        <span class="text-lg leading-none">&#9881;&#65039;</span><span class="text-xs">Settings</span>
+      </button>
     </div>
   </nav>
 </div>
